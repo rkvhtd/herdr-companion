@@ -15,17 +15,22 @@ open-source project. Official Herdr is unchanged.
 
 ## Screenshots
 
-The phone and iPad images below are the real app, running from a DEBUG visual
-fixture with synthetic Example Mac data. They are not a live SSH session.
+These are the real app, running from a DEBUG visual fixture with synthetic
+Example Mac data. They are not a live SSH session.
 
 <p>
   <img src="docs/images/phone-overview.png" alt="iPhone demo of the Desk, connected to Example Mac. Attention lists reviewer needing you, mystery-bot with unknown status, and two running agents." width="320">
   <img src="docs/images/phone-workspace.png" alt="iPhone demo of the Companion App workspace. The review tab shows Codex, Claude, and Gemini agents; the shell tab shows a zsh pane." width="320">
 </p>
 
+<details>
+<summary>See the iPad layout</summary>
+
 <p>
   <img src="docs/images/ipad-workspace.png" alt="iPad demo of the Companion App workspace on a larger layout, with review and shell tabs and the same synthetic agent panes." width="720">
 </p>
+
+</details>
 
 See [docs/images/ATTRIBUTION.md](docs/images/ATTRIBUTION.md) for what these
 files are.
@@ -76,30 +81,69 @@ attachment.
 ```bash
 git clone https://github.com/rkvhtd/herdr-companion.git
 cd herdr-companion
+```
+
+The Xcode project is generated and is not committed. `project.yml` leaves
+`DEVELOPMENT_TEAM` empty. There is no App Store or TestFlight build.
+
+### Simulator
+
+A simulator run does not need an Apple Developer team.
+
+```bash
 xcodegen generate
 open HerdrCompanion.xcodeproj
 ```
 
-In Xcode, select the **HerdrCompanion** target, choose **your** Apple
-Developer team, pick a simulator or a device you sign, and Run.
+In Xcode, select the HerdrCompanion scheme and a simulator, then Run.
 
-The committed bundle identifier is `com.elysium.herdrcompanion`.
-`project.yml` leaves `DEVELOPMENT_TEAM` empty on purpose. If you fork this
-project, choose your own unique bundle identifiers and Apple team. Do not
-reuse another publisher's team or App ID.
+An unsigned command-line build is under [Development](#development).
 
-There is no App Store or TestFlight build. A free Personal Team install is
-not promised. Signing stays on the machine that opens the project.
+### Physical device
 
-### Physical-device signing
+The committed app identifier is `com.elysium.herdrcompanion`. That App ID
+belongs to the publisher. If you are not signing with the publisher's Apple
+team, change all three `PRODUCT_BUNDLE_IDENTIFIER` values in `project.yml`
+to unique identifiers your team controls before you run `xcodegen generate`.
+Those settings are:
 
-The current target always requests the `aps-environment` entitlement, so
-every physical-device build needs a matching push-capable App ID and
-provisioning profile. A profile without that capability can fail signing or
-provisioning before the app launches, even if you do not intend to use
-notifications. Runtime notification use remains optional. Debug uses the
-APNs `development` environment; Release uses `production`. Real APNs
-delivery is not verified by the tests in this repository.
+| Target | `PRODUCT_BUNDLE_IDENTIFIER` today | Example replacement |
+| --- | --- | --- |
+| HerdrCompanion | `com.elysium.herdrcompanion` | `com.example.herdrcompanion` |
+| HerdrCompanionTests | `com.elysium.herdrcompanion.tests` | `com.example.herdrcompanion.tests` |
+| HerdrCompanionUITests | `com.elysium.herdrcompanion.uitests` | `com.example.herdrcompanion.uitests` |
+
+Use your own reverse-DNS names, not `com.example` and not the publisher IDs.
+Do this for a fresh clone as well as a fork.
+
+Then generate and open:
+
+```bash
+xcodegen generate
+open HerdrCompanion.xcodeproj
+```
+
+Select the HerdrCompanion scheme, choose your Apple Developer team, keep
+automatic signing, connect and select your device, and Run.
+
+If you edit `project.yml` after generating, run `xcodegen generate` again.
+Signing choices made only in Xcode are not stored in `project.yml`; a later
+generate can overwrite them. Keep identifier changes in `project.yml` so they
+survive regeneration.
+
+The current device target always requests the `aps-environment` entitlement,
+so the App ID and provisioning profile for a physical device need the Push
+Notifications capability even if you never turn on alerts. A profile without
+that capability can fail signing or provisioning before the app launches.
+Runtime notification use remains optional. Debug uses the APNs `development`
+environment; Release uses `production`. Real APNs delivery is not verified
+by the tests in this repository.
+
+The current device target requires an Apple Developer Program team with Push
+Notifications support. A free Personal Team cannot provision this unchanged
+entitlement. See Apple's [supported capabilities for iOS](https://developer.apple.com/help/account/reference/supported-capabilities-ios).
+
+Do not reuse another publisher's team or App ID.
 
 ## Connect
 
