@@ -4,19 +4,20 @@
 
 # Herdr Companion
 
-Unofficial iPhone and iPad client for a [Herdr](https://herdr.dev) server on
-your Mac. It talks to that Mac over SSH. There is no Herdr relay, cloud
-account, or telemetry.
+Control the [Herdr](https://herdr.dev) workspace on your Mac from iPhone or
+iPad: see what needs you, open the workspace, tab, and pane, and work in
+the live terminal.
 
-This is not official Herdr. Elysium Technologies publishes it as a personal
-open-source project. Official Herdr is unchanged.
+It uses SSH you already have on the LAN or a VPN/mesh (Tailscale and
+similar are fine). No Herdr cloud account, relay, or telemetry.
+Unofficial open-source client from Elysium Technologies; official Herdr
+is unchanged.
 
 [Install](#install) · [Connect](#connect) · [Limits](#limits) · [Notifications](#optional-notifications) · [Credits](#credits)
 
 ## Screenshots
 
-These are the real app, running from a DEBUG visual fixture with synthetic
-Example Mac data. They are not a live SSH session.
+The real app, with demo data. Not a live SSH session.
 
 <p>
   <img src="docs/images/phone-overview.png" alt="iPhone demo of the Desk, connected to Example Mac. Attention lists reviewer needing you, mystery-bot with unknown status, and two running agents." width="320">
@@ -35,46 +36,23 @@ Example Mac data. They are not a live SSH session.
 See [docs/images/ATTRIBUTION.md](docs/images/ATTRIBUTION.md) for what these
 files are.
 
-## What it does
+## Away from the desk
 
-- Saves SSH hosts (nickname, address, user, Herdr session, key or password).
-  Secrets stay in the device Keychain.
-- Pins the first successful host key. A later mismatch needs an explicit
-  confirmation.
-- Shows a grouped desk of agents that need you, are running, or are idle.
-- Browses workspaces, tabs, and panes. Creates a workspace, terminal tab, or
-  split with an explicit folder. The companion does not use Mac focus to pick
-  a folder.
-- Attaches to a pane. Agent panes use `herdr agent attach`; plain panes use
-  `herdr terminal attach`. Both run in a dedicated SSH PTY.
-- Optional image attach uploads to a private app-owned directory on that Mac
-  and inserts the path only after you tap. Insertion does not send Return.
+The Desk is the first screen. Agents that need you sit at the top, then
+the ones still running, then idle. Unknown status stays on the list
+rather than disappearing.
 
-Connection failures are shown without logging credentials.
+From there, open a workspace Herdr already has. Pick the tab, then the
+pane, and attach when you want to type. You are in the live terminal:
+answer the agent, run the next command, or read what already happened.
 
-## What you need
+To start another shell, create a workspace, a terminal tab, or a split,
+and give it an existing folder. The app does not invent a path from
+whatever the Mac currently has focused, and it does not create folders.
 
-Tested against official Herdr **0.9.0** (protocol **22**). Newer Herdr
-releases are not claimed compatible.
-
-- A Mac running that Herdr version.
-- SSH from the iPhone or iPad to that Mac. The device has to be able to
-  reach the host already: same LAN, or a VPN/mesh address you already use
-  (Tailscale and similar are fine). Do not expose SSH to the public internet
-  for this app.
-- Xcode 26.5 and XcodeGen 2.46 or newer to generate and compile this
-  checkout. The app target is iOS 17.
-
-On the Mac:
-
-```bash
-herdr --version
-herdr status server
-```
-
-The standard session name is `default`. A named session can be selected on a
-saved host; the same session is used for the JSON control socket and terminal
-attachment.
+An image can be handed to the terminal as a path. Upload is images only,
+into a private app-owned directory on that Mac. The path is inserted only
+after you tap. Insertion does not send Return.
 
 ## Install
 
@@ -83,8 +61,24 @@ git clone https://github.com/rkvhtd/herdr-companion.git
 cd herdr-companion
 ```
 
-The Xcode project is generated and is not committed. `project.yml` leaves
-`DEVELOPMENT_TEAM` empty. There is no App Store or TestFlight build.
+You need Xcode 26.5 and XcodeGen 2.46 or newer. The app target is iOS 17.
+The Xcode project is generated from [`project.yml`](project.yml) and is
+not committed. `DEVELOPMENT_TEAM` is left empty. There is no App Store or
+TestFlight build.
+
+Tested against official Herdr **0.9.0** (protocol **22**). Newer releases
+are not claimed compatible.
+
+On the Mac:
+
+```bash
+herdr --version
+herdr status server
+```
+
+The usual session name is `default`. A named session can be selected on a
+saved host; the same session is used for the JSON control socket and
+terminal attachment.
 
 ### Simulator
 
@@ -99,13 +93,18 @@ In Xcode, select the HerdrCompanion scheme and a simulator, then Run.
 
 An unsigned command-line build is under [Development](#development).
 
-### Physical device
+A physical device needs a paid Apple Developer Program team whose App ID
+includes Push Notifications, even if you never turn on alerts. A free
+Personal Team cannot provision this unchanged entitlement.
+
+<details>
+<summary>Physical device: change all three bundle identifiers first</summary>
 
 The committed app identifier is `com.elysium.herdrcompanion`. That App ID
 belongs to the publisher. If you are not signing with the publisher's Apple
-team, change all three `PRODUCT_BUNDLE_IDENTIFIER` values in `project.yml`
-to unique identifiers your team controls before you run `xcodegen generate`.
-Those settings are:
+team, change all three `PRODUCT_BUNDLE_IDENTIFIER` values in
+[`project.yml`](project.yml) to unique identifiers your team controls
+before you run `xcodegen generate`. Those settings are:
 
 | Target | `PRODUCT_BUNDLE_IDENTIFIER` today | Example replacement |
 | --- | --- | --- |
@@ -145,34 +144,37 @@ entitlement. See Apple's [supported capabilities for iOS](https://developer.appl
 
 Do not reuse another publisher's team or App ID.
 
+</details>
+
 ## Connect
 
 1. Save a nickname, SSH address (`host` or `host:port`), username, Herdr
-   session, and either a private key or a password.
+   session, and either a private key or a password. Secrets stay in the
+   device Keychain.
 2. Connect. The first successful host key is pinned. A later mismatch needs an explicit confirmation.
-3. Browse workspaces, tabs, and panes, or open an agent from the desk.
-4. Attach to a pane when you want the live terminal.
+3. Browse workspaces, tabs, and panes, or open an agent from the Desk.
+4. Attach to a pane when you want the live terminal. Agent panes use
+   `herdr agent attach`; plain panes use `herdr terminal attach`.
 
 The phone or iPad only needs to reach that Mac's SSH the same way you
 already would from another machine on your network. Keep port 22 off the
-public internet.
+public internet. Connection failures are shown; credentials are not written
+to logs.
 
 ## Limits
 
-Included: saved SSH hosts, host-key pinning, official topology,
-workspace/tab/split creation, official terminal attachment, optional
-self-hosted APNs helper.
-
-Not included: creating agents; closing or renaming workspaces, tabs, or
-panes; arbitrary remote file browsing; automatic folder creation; non-image
-uploads; VPN switching; server account or update management; session
-migration; fork-only messaging APIs; App Store or TestFlight distribution.
+The app does not create agents, and it does not rename or close workspaces,
+tabs, or panes. It is not a remote file browser, it will not create
+folders, and only images can be uploaded. It does not switch VPNs, manage
+the Herdr server, migrate sessions, or use fork-only messaging APIs. There
+is no App Store or TestFlight build.
 
 ## Optional notifications
 
-Sending alerts needs a physical iPhone or iPad, an APNs token-signing key,
-and a helper on every saved Mac that should send those alerts. Simulator
-builds check UI and routing. They are not evidence of a real APNs delivery.
+Alerts are optional and self-hosted. Sending them needs a physical iPhone
+or iPad, an APNs token-signing key, and a helper on every saved Mac that
+should send those alerts. Simulator builds check UI and routing. They are
+not evidence of a real APNs delivery.
 
 Setup: [docs/notifications-setup.md](docs/notifications-setup.md).
 Protocol: [docs/notifications-protocol.md](docs/notifications-protocol.md).
@@ -182,9 +184,7 @@ Apple accounts or keys.
 
 ## Development
 
-This is a bounded personal project. Issues and pull requests for defects in
-the published sources are welcome. There is no support SLA, roadmap promise,
-sponsorship program, or hosted extra service.
+Issues and pull requests for defects in the published sources are welcome.
 
 <details>
 <summary>Unsigned simulator build and package tests</summary>
@@ -236,17 +236,12 @@ Mac.
 Derived from [Herdrup](https://github.com/jerryfane/herdrup) at commit
 [`93c6578666e656c3206661389e81853bcc0b88da`](https://github.com/jerryfane/herdrup/commit/93c6578666e656c3206661389e81853bcc0b88da)
 ([Apache-2.0](https://github.com/jerryfane/herdrup/blob/93c6578/LICENSE)).
+The iOS shell, optional notification helper, and related tests are Companion
+work on top of that baseline. The protocol layer is retained and modified.
+Vendored SwiftTerm is unchanged in origin.
 
-Companion-specific sources live mainly in `App/`,
-`Sources/HerdrNotificationHelper`, `Sources/HerdrNotificationHelperCore`,
-`Tests/HerdrCompanionTests`, `Tests/HerdrCompanionUITests`, and
-`Tests/HerdrNotificationHelperTests`. They replace the inherited Herdrup iOS
-shell with a narrower official-Herdr workflow. `Sources/HerdrKit` is the
-retained and modified protocol/transport layer. Vendored SwiftTerm is
-unchanged in origin.
-
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). App icon
-replacement provenance is in
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) (including SwiftTerm,
+Geist, and IBM Plex Mono). App icon replacement provenance is in
 [App/Assets.xcassets/ATTRIBUTION.md](App/Assets.xcassets/ATTRIBUTION.md).
 Landing images are described in
 [docs/images/ATTRIBUTION.md](docs/images/ATTRIBUTION.md).
