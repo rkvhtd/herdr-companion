@@ -1,0 +1,67 @@
+# Modified from Herdrup https://github.com/jerryfane/herdrup commit 93c6578666e656c3206661389e81853bcc0b88da by Elysium Technologies.
+# Simulator compile-check and default package tests.
+# No signing secrets, live SSH, or release uploads.
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  herdrkit:
+    name: HerdrKit (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Default tests
+        run: swift test
+      - name: Vendored SwiftTerm
+        run: swift test --package-path Vendor/SwiftTerm
+
+  ios:
+    name: HerdrCompanion simulator compile
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml', 'Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+      - name: Select Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$LATEST"
+          xcodebuild -version
+      - name: Download the Metal toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain 2>&1 | tail -20 || \
+            echo "::warning::Metal toolchain download returned nonzero; continuing"
+      - name: Install XcodeGen
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build HerdrCompanion for generic iOS Simulator
+        run: |
+          xcodebuild build \
+            -project HerdrCompanion.xcodeproj \
+            -scheme HerdrCompanion \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath .derivedData \
+            -clonedSourcePackagesDirPath SourcePackages \
+            CODE_SIGNING_ALLOWED=NO

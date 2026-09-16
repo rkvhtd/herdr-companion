@@ -1,0 +1,135 @@
+# Modified from Herdrup https://github.com/jerryfane/herdrup commit 93c6578666e656c3206661389e81853bcc0b88da by Elysium Technologies.
+name: HerdrCompanion
+
+options:
+  bundleIdPrefix: com.elysium
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  HerdrKit:
+    path: .
+  SwiftTerm:
+    path: Vendor/SwiftTerm
+
+targets:
+  HerdrCompanion:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/CompanionApp.swift
+      - path: App/CompanionHostKeyPolicy.swift
+      - path: App/CompanionTerminalView.swift
+      - path: App/CompanionNotifications.swift
+      - path: App/SavedHosts.swift
+      - path: App/HostEditor.swift
+      - path: App/DesignSystem.swift
+      - path: App/CompanionChrome.swift
+      - path: App/CompanionOverview.swift
+      - path: App/CompanionLaunchFixture.swift
+      - path: App/CompanionTerminalSession.swift
+      - path: App/Fonts
+      - path: App/Assets.xcassets
+    dependencies:
+      - package: HerdrKit
+        product: HerdrKit
+      - package: SwiftTerm
+        product: SwiftTerm
+      - sdk: Security.framework
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Herdr Companion
+        CFBundleName: Herdr Companion
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        CFBundleIconName: AppIcon
+        ITSAppUsesNonExemptEncryption: false
+        HerdrAPNSEnvironment: $(APS_ENVIRONMENT)
+        UILaunchScreen: {}
+        UIAppFonts:
+          - Geist-Regular.ttf
+          - Geist-Medium.ttf
+          - Geist-SemiBold.ttf
+          - Geist-Bold.ttf
+          - IBMPlexMono-Regular.ttf
+          - IBMPlexMono-Medium.ttf
+          - IBMPlexMono-SemiBold.ttf
+          - IBMPlexMono-Bold.ttf
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.elysium.herdrcompanion
+        PRODUCT_NAME: Herdr Companion
+        PRODUCT_MODULE_NAME: HerdrCompanion
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        # Left empty on purpose. Choose a local Apple team in Xcode; do not commit one.
+        DEVELOPMENT_TEAM: ""
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        CODE_SIGN_ENTITLEMENTS: App/HerdrCompanion.entitlements
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
+
+  HerdrCompanionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/HerdrCompanionTests
+    dependencies:
+      - target: HerdrCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.elysium.herdrcompanion.tests
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Herdr Companion.app/Herdr Companion"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+
+  HerdrCompanionUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/HerdrCompanionUITests
+    dependencies:
+      - target: HerdrCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.elysium.herdrcompanion.uitests
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: HerdrCompanion
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+
+schemes:
+  HerdrCompanion:
+    build:
+      targets:
+        HerdrCompanion: all
+        HerdrCompanionTests: [test]
+        HerdrCompanionUITests: [test]
+    test:
+      targets:
+        - HerdrCompanionTests
+        - HerdrCompanionUITests

@@ -1,0 +1,28 @@
+Herdr Companion
+Copyright 2026 Elysium Technologies
+
+This work is derived from Herdrup
+https://github.com/jerryfane/herdrup
+commit 93c6578666e656c3206661389e81853bcc0b88da
+licensed under the Apache License, Version 2.0. See LICENSE.
+
+Apache-2.0 section 4(b): files retained from that baseline and then changed
+carry a short modification notice. Companion-original sources (the Herdr
+Companion iOS UI, optional notification helper, and related tests/docs) were
+not in that Herdrup commit.
+
+App icon and logo PNG replacements: App/Assets.xcassets/ATTRIBUTION.md
+
+This product includes a vendored distribution of SwiftTerm. Copyright
+notices and the MIT license are in Vendor/SwiftTerm/LICENSE; those
+third-party terms are unchanged.
+
+This product includes the Geist font family, licensed under the SIL Open
+Font License 1.1. See App/Fonts/Geist-OFL.txt.
+
+This product includes IBM Plex Mono, licensed under the SIL Open Font
+License 1.1. See App/Fonts/IBMPlexMono-OFL.txt.
+
+Citadel and other Swift package dependencies are retrieved from their
+upstream repositories as declared in Package.swift and Package.resolved
+and retain their own licenses.

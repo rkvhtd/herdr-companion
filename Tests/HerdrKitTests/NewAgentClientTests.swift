@@ -1,0 +1,226 @@
+import XCTest
+@testable import HerdrKit
+
+/// The two client calls the new-agent flow adds: splitPane (make a pane in a
+/// folder) and startAgent (launch a kind in that pane). Both the request encoding
+/// and the response decoding are pinned against herdr's actual wire shapes
+/// (pane.split -> ResponseResult::PaneInfo{pane}; agent.start ->
+/// ResponseResult::AgentStarted{agent,argv}).
+final class NewAgentClientTests: XCTestCase {
+
+    /// Records the request line and replies with a canned response per method.
+    private final class CapturingTransport: HerdrTransport, @unchecked Sendable {
+        var lastRequest = ""
+        func roundTrip(_ requestLine: String) async throws -> String {
+            lastRequest = requestLine
+            if requestLine.contains("pane.split") {
+                return #"{"id":"x","result":{"type":"pane_info","pane":{"pane_id":"w1:p9"}}}"#
+            }
+            if requestLine.contains("agent.start") {
+                return #"{"id":"x","result":{"type":"agent_started","agent":{"pane_id":"w1:p9","name":"fix-tests","agent":"codex","agent_status":"working"},"argv":["codex"]}}"#
+            }
+            return #"{"id":"x","result":{}}"#
+        }
+        func stream(_ requestLine: String) -> AsyncThrowingStream<String, Error> {
+            AsyncThrowingStream { $0.finish() }
+        }
+    }
+
+    func testSplitPaneSendsFolderAndDirectionAndReturnsNewPaneID() async throws {
+        let t = CapturingTransport()
+        let pane = try await HerdrClient(transport: t).splitPane(cwd: "/root/herdr-ios", direction: .down)
+
+        XCTAssertEqual(pane, "w1:p9", "did not decode pane_id from pane.split's PaneInfo{pane} result")
+        // Anchor the method to the whole value so a suffix (pane.splitx) fails.
+        XCTAssertTrue(t.lastRequest.contains(#""method":"pane.split""#), "wrong method")
+        // Slash-independent: JSONEncoder escapes "/" as "\/", so match the key +
+        // the (slashless) folder name rather than the literal path.
+        XCTAssertTrue(t.lastRequest.contains("\"cwd\""), "cwd key (the folder) was not sent")
+        XCTAssertTrue(t.lastRequest.contains("herdr-ios"), "cwd value (the folder) was not sent")
+        XCTAssertTrue(t.lastRequest.contains(#""direction":"down""#), "direction was not sent")
+        XCTAssertTrue(t.lastRequest.contains(#""focus":true"#), "focus flag was not sent as expected")
+    }
+
+    func testSplitPaneOmitsCwdWhenNil() async throws {
+        let t = CapturingTransport()
+        _ = try await HerdrClient(transport: t).splitPane(cwd: nil)
+        // A nil cwd must not be sent as an explicit null/empty — the server then
+        // follows the split pane's own cwd.
+        XCTAssertFalse(t.lastRequest.contains("\"cwd\""), "nil cwd should be omitted, not sent")
+    }
+
+    func testStartAgentSendsSnakeCasePaneIDAndDecodesTheAgent() async throws {
+        let t = CapturingTransport()
+        let agent = try await HerdrClient(transport: t).startAgent(name: "fix-tests", kind: "codex", paneID: "w1:p9")
+
+        XCTAssertEqual(agent.paneID, "w1:p9")
+        XCTAssertEqual(agent.agent, "codex")
+        XCTAssertEqual(agent.displayName, "fix-tests")
+        XCTAssertTrue(t.lastRequest.contains(#""method":"agent.start""#), "wrong method")
+        // Pin the key:value PAIRS, not just the keys — otherwise transposing name
+        // and kind (spawn the wrong kind under the wrong name) survives.
+        XCTAssertTrue(t.lastRequest.contains(#""name":"fix-tests""#), "name/value not sent correctly")
+        XCTAssertTrue(t.lastRequest.contains(#""kind":"codex""#), "kind/value not sent correctly")
+        // The pane id must go out under the snake_case wire key the server expects.
+        XCTAssertTrue(t.lastRequest.contains(#""pane_id":"w1:p9""#), "pane_id must use the snake_case wire key")
+    }
+
+    /// AXIS: a server error envelope from these methods surfaces as a thrown
+    /// APIError — the property the whole spawn flow's error handling leans on.
+    func testServerErrorSurfacesAsAPIError() async throws {
+        struct ErrorTransport: HerdrTransport {
+            func roundTrip(_ r: String) async throws -> String {
+                #"{"id":"x","error":{"code":"agent_not_ready","message":"agent w1:p9 is not ready"}}"#
+            }
+            func stream(_ r: String) -> AsyncThrowingStream<String, Error> { AsyncThrowingStream { $0.finish() } }
+        }
+        let client = HerdrClient(transport: ErrorTransport())
+        do {
+            _ = try await client.splitPane(cwd: "/x")
+            XCTFail("expected the error envelope to throw")
+        } catch let e as APIError {
+            XCTAssertEqual(e.code, "agent_not_ready")
+        }
+    }
+
+    func testClosePaneSendsPaneID() async throws {
+        let t = CapturingTransport()
+        try await HerdrClient(transport: t).closePane(paneID: "w1:p9")
+        XCTAssertTrue(t.lastRequest.contains("pane.close"), "wrong method")
+        XCTAssertTrue(t.lastRequest.contains("\"pane_id\""), "pane_id must use the snake_case wire key")
+        XCTAssertTrue(t.lastRequest.contains("w1:p9"))
+    }
+
+    /// Serves one canned agent.list. The new-agent flow's readiness gate reads THIS
+    /// to know when a freshly-spawned agent can receive its pre-filled task.
+    private final class ListStub: HerdrTransport, @unchecked Sendable {
+        let json: String
+        init(_ json: String) { self.json = json }
+        func roundTrip(_ requestLine: String) async throws -> String { json }
+        func stream(_ r: String) -> AsyncThrowingStream<String, Error> { AsyncThrowingStream { $0.finish() } }
+    }
+
+    /// AXIS: isPromptable is TRUE only when the pane reports an agent WITH a
+    /// composer — the exact gate the pre-filled task delivery waits on. This is the
+    /// signal that replaces the nil interactive_ready.
+    func testIsPromptableTrueWhenAgentHasComposer() async throws {
+        let t = ListStub(#"{"id":"x","result":{"agents":[{"pane_id":"w1:p9","agent":"claude","composer":{"state":"unknown"}}]}}"#)
+        let ready = try await HerdrClient(transport: t).isPromptable(pane: "w1:p9")
+        XCTAssertTrue(ready, "an agent with a composer must be promptable")
+    }
+
+    /// AXIS: a booting agent that has NOT registered a composer yet is NOT
+    /// promptable — delivering then would fall to rawKeys send_text into a shell.
+    /// (Mutation guard: dropping the composer half of the intent gate makes this
+    /// pass wrongly, so the assertion KILLs that mutation.)
+    func testIsPromptableFalseWithoutComposer() async throws {
+        let t = ListStub(#"{"id":"x","result":{"agents":[{"pane_id":"w1:p9","agent":"claude"}]}}"#)
+        let ready = try await HerdrClient(transport: t).isPromptable(pane: "w1:p9")
+        XCTAssertFalse(ready, "an agent without a composer must NOT be promptable")
+    }
+
+    /// AXIS: an absent pane is not promptable (never crash / never assume ready).
+    func testIsPromptableFalseWhenPaneAbsent() async throws {
+        let t = ListStub(#"{"id":"x","result":{"agents":[{"pane_id":"w1:pOTHER","agent":"claude","composer":{"state":"unknown"}}]}}"#)
+        let ready = try await HerdrClient(transport: t).isPromptable(pane: "w1:p9")
+        XCTAssertFalse(ready, "a pane not present in agent.list must NOT be promptable")
+    }
+}
+
+/// `agent.prompt`'s wait/delivery contract (Fix E): the app passes `wait` to get a
+/// real `delivery` back and surfaces rejections instead of failing silently.
+final class PromptDeliveryTests: XCTestCase {
+
+    /// Records the request and replies with a canned `agent_prompted` result whose
+    /// `delivery` the caller chooses.
+    private final class DeliveryTransport: HerdrTransport, @unchecked Sendable {
+        var lastRequest = ""
+        let delivery: String
+        init(delivery: String) { self.delivery = delivery }
+        func roundTrip(_ requestLine: String) async throws -> String {
+            lastRequest = requestLine
+            return #"{"id":"x","result":{"type":"agent_prompted","agent":{"pane_id":"w1:p1","agent":"claude","agent_status":"working"},"delivery":"\#(delivery)"}}"#
+        }
+        func stream(_ r: String) -> AsyncThrowingStream<String, Error> { AsyncThrowingStream { $0.finish() } }
+    }
+
+    func testPromptSendsWaitUntilAndTimeoutAndDecodesSubmitted() async throws {
+        let t = DeliveryTransport(delivery: "submitted")
+        let delivery = try await HerdrClient(transport: t)
+            .prompt(pane: "w1:p1", text: "ship it", waitUntil: HerdrClient.anyAgentStatus, timeoutMs: 6000)
+
+        XCTAssertEqual(delivery, .submitted, "a started turn must decode as .submitted")
+        XCTAssertTrue(t.lastRequest.contains(#""method":"agent.prompt""#), "wrong method")
+        XCTAssertTrue(t.lastRequest.contains(#""text":"ship it""#), "text not sent")
+        // The wait block must carry the until set and the snake_case timeout key.
+        XCTAssertTrue(t.lastRequest.contains(#""until":["#), "wait.until not sent")
+        XCTAssertTrue(t.lastRequest.contains(#""working""#), "wait.until values not sent")
+        XCTAssertTrue(t.lastRequest.contains(#""timeout_ms":6000"#), "timeout_ms not sent under its wire key")
+    }
+
+    func testPromptDecodesWrittenToPtyAsDistinctFromSubmitted() async throws {
+        let delivery = try await HerdrClient(transport: DeliveryTransport(delivery: "written_to_pty"))
+            .prompt(pane: "w1:p1", text: "hi", waitUntil: HerdrClient.anyAgentStatus)
+        XCTAssertEqual(delivery, .writtenToPty,
+                       "bytes-in-composer must NOT collapse into submitted (the stranded-draft state)")
+    }
+
+    /// No wait requested → the `wait` block is omitted entirely (not sent as null).
+    func testPromptOmitsWaitWhenNotRequested() async throws {
+        let t = DeliveryTransport(delivery: "written_to_pty")
+        _ = try await HerdrClient(transport: t).prompt(pane: "w1:p1", text: "hi")
+        XCTAssertFalse(t.lastRequest.contains("\"wait\""), "an unrequested wait must be omitted")
+    }
+
+    /// AXIS: a rejection surfaces as a thrown APIError so the app can show a clear
+    /// reason instead of silently not delivering.
+    func testPromptRejectionSurfacesAsAPIError() async throws {
+        struct RejectTransport: HerdrTransport {
+            func roundTrip(_ r: String) async throws -> String {
+                #"{"id":"x","error":{"code":"agent_input_pending","message":"agent has a pending input prompt"}}"#
+            }
+            func stream(_ r: String) -> AsyncThrowingStream<String, Error> { AsyncThrowingStream { $0.finish() } }
+        }
+        do {
+            _ = try await HerdrClient(transport: RejectTransport())
+                .prompt(pane: "w1:p1", text: "hi", waitUntil: HerdrClient.anyAgentStatus)
+            XCTFail("a rejection must throw, not return silently")
+        } catch let e as APIError {
+            XCTAssertEqual(e.code, "agent_input_pending")
+        }
+    }
+}
+
+/// Normalizing an arbitrary folder name to herdr's agent-name grammar, so
+/// agent.start never fails on the name AFTER a pane was created.
+final class AgentNameTests: XCTestCase {
+    func testKeepsAlreadyValidName() { XCTAssertEqual(AgentName.normalize("herdr-ios"), "herdr-ios") }
+    func testLowercases() { XCTAssertEqual(AgentName.normalize("Herdr-iOS"), "herdr-ios") }
+    func testDropsLeadingNonLettersAndMapsSeparators() { XCTAssertEqual(AgentName.normalize("~/My Project"), "my-project") }
+    func testLeadingDigitsDropped() { XCTAssertEqual(AgentName.normalize("123abc"), "abc") }
+
+    func testEmptyAndAllInvalidFallBackToAgent() {
+        XCTAssertEqual(AgentName.normalize(""), "agent")
+        XCTAssertEqual(AgentName.normalize("工作"), "agent")
+        XCTAssertEqual(AgentName.normalize("///"), "agent")
+    }
+
+    func testTruncatesTo32() {
+        XCTAssertEqual(AgentName.normalize(String(repeating: "a", count: 40)).count, 32)
+    }
+
+    /// AXIS: whatever the input, the output ALWAYS matches ^[a-z][a-z0-9_-]{0,31}$.
+    func testOutputAlwaysMatchesGrammar() {
+        for raw in ["herdr-ios", "Herdr-iOS", "~/My Project", "123", "工作", "",
+                    "UPPER_CASE.dot", "a b c d e f g h i j k l m n o p q r"] {
+            let n = AgentName.normalize(raw)
+            XCTAssertFalse(n.isEmpty, "\(raw.debugDescription) produced an empty name")
+            XCTAssertLessThanOrEqual(n.count, 32)
+            XCTAssertTrue(("a"..."z").contains(n.first!), "\(n) must start with a letter")
+            for ch in n {
+                XCTAssertTrue(("a"..."z").contains(ch) || ("0"..."9").contains(ch) || ch == "-" || ch == "_",
+                              "\(n) has an invalid character \(ch)")
+            }
+        }
+    }
+}
