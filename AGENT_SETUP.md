@@ -12,19 +12,22 @@ Target: [Simulator | iPhone | iPad]
 Device name: [if physical]
 Checkout: [existing path or clone destination]
 Apple team / bundle prefix: [physical device only]
-Mac SSH: [nickname, host or host:port, username, auth, Herdr session]
+Mac SSH: [nickname, host or host:port, username, Herdr session]
+Auth method: [private key | password; never include the secret]
 ```
 
 Ask only for missing target and device, checkout location, Apple team and
 bundle prefix on a physical device, and Mac SSH/session details that cannot
-be inferred. Honor authorizations already given; do not re-ask for every
-reversible step. Never collect Apple passwords, 2FA codes, or private-key
-contents in chat. Never impersonate a permission, Developer Mode,
-device-trust, or signing tap.
+be inferred (auth method only, never the secret). Honor authorizations
+already given; do not re-ask for every reversible step. SSH passwords, key
+passphrases, private-key contents, Apple passwords, and 2FA codes must never
+be supplied in chat or logs. Enter connection secrets locally in the app.
+Never impersonate a permission, Developer Mode, device-trust, or signing tap.
 
-Tested: iOS 17, Xcode 26.5, XcodeGen 2.46, official Herdr 0.9.0 (protocol
-22). Newer Xcode or Herdr is unclaimed. HerdrKit requires macOS 14. There is
-no App Store or TestFlight build. The agent can preflight, clone or inspect,
+Minimum deployment target: iOS 17. Documented toolchain: Xcode 26.5 and
+XcodeGen 2.46. Tested against official Herdr 0.9.0 (protocol 22). Newer
+Xcode or Herdr is unclaimed. HerdrKit requires macOS 14. There is no App
+Store or TestFlight build. The agent can preflight, clone or inspect,
 generate the Xcode project, do the unsigned simulator build, edit local
 bundle IDs, open the HerdrCompanion scheme, inspect an already running
 official Herdr session, and save connection fields the user supplies. Stop
@@ -51,20 +54,34 @@ and XcodeGen 2.46 or newer. Simulator route also needs an iOS Simulator SDK.
 If Xcode is missing or too old, stop: install Xcode 26.5 from Apple, accept
 the license, and point `xcode-select` at it. Do not run `sudo` or upgrade
 Xcode unless the user asked. If `xcodegen` is missing, stop and ask how they
-install Mac tools. Homebrew users can install XcodeGen 2.46 with
-`brew install xcodegen`. No curl-pipe-shell, and no unsolicited global
-upgrades.
+install Mac tools. Homebrew users can run `brew install xcodegen`, then
+confirm `xcodegen --version` is 2.46 or newer; the formula is unpinned. No
+curl-pipe-shell, and no unsolicited global upgrades.
 
 ## 2. Checkout
 
 Public repo: `https://github.com/rkvhtd/herdr-companion.git`.
 
-If Checkout is empty, ask where to clone. If it names an existing directory,
-`cd` there and inspect; do not reset, clean, or overwrite local changes.
+If Checkout is empty, ask where to clone. Resolve the answer to an absolute
+path and assign `CHECKOUT` to that path before running either block below.
+Do not run the examples with a placeholder still in `CHECKOUT`.
+
+New clone, only when that path is not already the repo:
 
 ```bash
-# new clone only; skip if Checkout already exists
+: "${CHECKOUT:?set CHECKOUT to the chosen absolute destination first}"
 git clone https://github.com/rkvhtd/herdr-companion.git "$CHECKOUT"
+cd "$CHECKOUT"
+git rev-parse HEAD
+git status
+git remote -v
+```
+
+Existing checkout: inspect that tree. Do not clone onto it, and do not
+reset, clean, or overwrite local changes.
+
+```bash
+: "${CHECKOUT:?set CHECKOUT to the existing absolute checkout first}"
 cd "$CHECKOUT"
 git rev-parse HEAD
 git status
@@ -179,19 +196,23 @@ enough.
 
 ## 6. Connect to the Mac
 
-Official Herdr must be installed and running. Inspect the named session
-(usually `default`):
+Official Herdr must be installed and running on the intended Mac. Bind
+`HERDR_SESSION` to the session the user selected for this saved host
+(`default` if they did not name another). Do not inspect a different
+session this agent happens to be using.
 
 ```bash
+: "${HERDR_SESSION:?set HERDR_SESSION to the session selected for this Mac first}"
 herdr --version
-herdr status server
+herdr --session "$HERDR_SESSION" status server
 ```
 
-A named session is selected on the saved host. The same session is used for
-the JSON control socket and terminal attachment. `default` uses
-`~/.config/herdr/herdr.sock`; other names use
-`~/.config/herdr/sessions/<name>/herdr.sock`. Names are 1–64 letters, numbers,
-dots, underscores, or hyphens.
+The same session is used for the JSON control socket and terminal
+attachment. On that Mac the socket root (`CONFIG_ROOT`) is
+`${XDG_CONFIG_HOME:-$HOME/.config}`. `default` uses
+`$CONFIG_ROOT/herdr/herdr.sock`. Other names use
+`$CONFIG_ROOT/herdr/sessions/<name>/herdr.sock`. Names are 1–64 bytes of
+ASCII letters, digits, `.`, `_`, or `-`, except `.` and `..`.
 
 Reuse LAN, VPN, or mesh reachability the user already has. Enable macOS
 Remote Login only with their authorization, and only if it is not already
@@ -199,13 +220,16 @@ on. Keep port 22 off the public internet.
 
 In the app, save nickname, SSH address (`host` or `host:port`), username,
 Herdr session, and a private key or password. Secrets stay in the device
-Keychain. Blank port is 22. Type values on the device; do not paste keys
-into chat. `localhost` / `127.0.0.1` on a physical phone is the phone, not
-the Mac. The iOS Simulator on the same Mac can use localhost when Remote
-Login is on.
+Keychain. Blank port is 22. Type the secret on the device; never put an SSH
+password, key passphrase, or private key in chat. `localhost` / `127.0.0.1`
+on a physical phone is the phone, not the Mac. The iOS Simulator on the same
+Mac can use localhost when Remote Login is on.
 
-Connect. The first successful host key is pinned. A later mismatch needs
-explicit confirmation in the app after both fingerprints are shown. Do not
+Connect. The first successful host key is pinned. A later mismatch shows
+the old pinned identity and a newly presented identity; those two values
+are supposed to differ. Independently verify the presented fingerprint
+against the intended Mac's current host key over a trusted channel before
+accepting. The dialog fingerprints are not enough by themselves. Do not
 bypass a mismatch or disable host-key checks.
 
 From the Desk, open a workspace Herdr already has, pick the tab, then the
@@ -232,24 +256,25 @@ synthetic fixture, is not an actual SSH session.
 | --- | --- |
 | `xcode-select` is Command Line Tools, or `xcodebuild` missing | Install Xcode 26.5 and switch the developer directory. Do not guess a path. |
 | No iOS Simulator SDK / runtime | Install the iOS platform in Xcode Settings. Do not boot random simulators. |
-| `xcodegen` missing or old | Ask before installing XcodeGen 2.46. Do not upgrade globals unasked. |
+| `xcodegen` missing or old | Ask before installing. After Homebrew, verify `xcodegen --version` is 2.46 or newer. Do not upgrade globals unasked. |
 | Bundle ID, team, or provisioning fails | All three identifiers must be unique and user-owned. Pick the user's paid team in Xcode. Generate again after `project.yml` edits. |
 | Push / `aps-environment` | App ID needs Push Notifications. Personal Team cannot provision this target unchanged. Do not strip the entitlement. |
 | Device locked, untrusted, or Developer Mode off | Human unlocks, trusts the computer, and enables Developer Mode. Stop there. |
 | Cannot reach SSH | Use the same host:port that already works from another machine. A phone's localhost is the phone. |
 | Auth failed | User re-enters the key or password in the app. Do not dump credentials or `~/.ssh`. |
-| Host key changed | Read both fingerprints in the app. Confirm only if they match the Mac. Never skip the check. |
-| Empty session, wrong session, or protocol errors | Session field must match a running official session. Tested: Herdr 0.9.0, protocol 22. Newer is unclaimed. |
-| Remote socket missing | Confirm `herdr status server` on that session. `default` vs `~/.config/herdr/sessions/<name>/`. |
+| Host key changed | The pinned and presented values are supposed to differ. Verify the presented fingerprint against the Mac's current key over a trusted channel before accepting. Never skip the check. |
+| Empty session, wrong session, or protocol errors | Bind `HERDR_SESSION` to the selected name and run `herdr --session "$HERDR_SESSION" status server` on that Mac. Names: 1–64 bytes, ASCII letters/digits/`.`/`_`/`-`, not `.` or `..`. Tested: Herdr 0.9.0, protocol 22. Newer is unclaimed. |
+| Remote socket missing | Same bound `herdr --session "$HERDR_SESSION" status server`. Socket root `${XDG_CONFIG_HOME:-$HOME/.config}`; `default` is `$CONFIG_ROOT/herdr/herdr.sock`, named is `$CONFIG_ROOT/herdr/sessions/<name>/herdr.sock`. |
 
 No broad reset, forced signing, permission bypass, or silent scope change.
 
 ## 9. Optional notifications
 
-Skip unless the user asked. Simulator and package tests are not real APNs
-delivery. Helper and `.p8` setup is
-[docs/notifications-setup.md](docs/notifications-setup.md) on explicit request
-only. Do not install LaunchAgents, copy keys, or send pushes.
+Skip for basic setup. Simulator and package tests are not real APNs
+delivery. A separate explicit request may follow
+[docs/notifications-setup.md](docs/notifications-setup.md), including that
+guide's own authorization requirements. Do not install LaunchAgents, copy
+`.p8` keys, or send test pushes as part of basic setup.
 
 ## 10. Handoff
 

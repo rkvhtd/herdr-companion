@@ -28,8 +28,12 @@ Target: [Simulator | iPhone | iPad]
 Device name: [if physical]
 Checkout: [existing path or clone destination]
 Apple team / bundle prefix: [physical device only]
-Mac SSH: [nickname, host or host:port, username, auth, Herdr session]
+Mac SSH: [nickname, host or host:port, username, Herdr session]
+Auth method: [private key | password; never include the secret]
 ```
+
+SSH passwords, key passphrases, private-key contents, Apple passwords, and
+2FA codes must never go in chat or logs. Enter connection secrets in the app.
 
 ## Screenshots
 
