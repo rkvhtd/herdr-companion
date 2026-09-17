@@ -13,7 +13,23 @@ similar are fine). No Herdr cloud account, relay, or telemetry.
 Unofficial open-source client from Elysium Technologies; official Herdr
 is unchanged.
 
-[Install](#install) · [Connect](#connect) · [Limits](#limits) · [Notifications](#optional-notifications) · [Credits](#credits)
+[Set up with your AI agent](AGENT_SETUP.md) · [Install](#install) · [Connect](#connect) · [Limits](#limits) · [Notifications](#optional-notifications) · [Credits](#credits)
+
+## Set up with your AI agent
+
+Point an agent at
+[AGENT_SETUP.md](https://github.com/rkvhtd/herdr-companion/blob/main/AGENT_SETUP.md).
+Paste:
+
+```
+Read https://github.com/rkvhtd/herdr-companion/blob/main/AGENT_SETUP.md and follow it in this environment.
+
+Target: [Simulator | iPhone | iPad]
+Device name: [if physical]
+Checkout: [existing path or clone destination]
+Apple team / bundle prefix: [physical device only]
+Mac SSH: [nickname, host or host:port, username, auth, Herdr session]
+```
 
 ## Screenshots
 
@@ -142,7 +158,10 @@ The current device target requires an Apple Developer Program team with Push
 Notifications support. A free Personal Team cannot provision this unchanged
 entitlement. See Apple's [supported capabilities for iOS](https://developer.apple.com/help/account/reference/supported-capabilities-ios).
 
-Do not reuse another publisher's team or App ID.
+Use your own Apple Developer team and unique bundle identifiers so Xcode can
+sign the app for your devices. Those identifiers are public labels, not
+passwords. Another team's App ID is not signing authority for you, and
+reusing it can collide with provisioning or the identifier itself.
 
 </details>
 
